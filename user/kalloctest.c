@@ -68,10 +68,17 @@ void test1(void)
   }
   printf("test1 results:\n");
   n = ntas(1);
-  if(n-m < 10) 
-    printf("test1 OK\n");
-  else
+  if (n == -1) {
     printf("test1 FAIL\n");
+    printf("tot = -1, make sure you have both lock 'kmem*' and 'bcache*'\n");
+  }
+  else
+  {
+    if (n - m < 10)
+      printf("test1 OK\n");
+    else
+      printf("test1 FAIL\n");
+  }
 }
 
 //

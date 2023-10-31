@@ -133,10 +133,17 @@ test0()
   }
   printf("test0 results:\n");
   n = ntas(1);
-  if (n-m < 500)
-    printf("test0: OK\n");
+  if (n == -1) {
+    printf("test0 FAIL\n");
+    printf("tot = -1, make sure you have both lock 'kmem*' and 'bcache*'\n");
+  }
   else
-    printf("test0: FAIL\n");
+  {
+    if (n-m < 500)
+      printf("test0: OK\n");
+    else
+      printf("test0: FAIL\n");
+  }
 }
 
 void test1()

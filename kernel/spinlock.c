@@ -174,6 +174,7 @@ int
 statslock(char *buf, int sz) {
   int n;
   int tot = 0;
+  int found = 0;
 
   acquire(&lock_locks);
   n = snprintf(buf, sz, "--- lock kmem/bcache stats\n");
@@ -184,7 +185,13 @@ statslock(char *buf, int sz) {
        strncmp(locks[i]->name, "kmem", strlen("kmem")) == 0) {
       tot += locks[i]->nts;
       n += snprint_lock(buf +n, sz-n, locks[i]);
+      found += 1;
     }
+  }
+
+  // Require at least two locks name after kmem/bcache.
+  if (found < 2) {
+    tot = -1;
   }
   
   n += snprintf(buf+n, sz-n, "--- top 5 contended locks:\n");
