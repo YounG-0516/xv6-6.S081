@@ -41,6 +41,7 @@ int exec(char *path, char **argv) {
     if (ph.vaddr + ph.memsz < ph.vaddr) goto bad;
     uint64 sz1;
     if ((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0) goto bad;
+    //if (sz1 > PLIC) goto bad;
     sz = sz1;
     if (ph.vaddr % PGSIZE != 0) goto bad;
     if (loadseg(pagetable, ph.vaddr, ip, ph.off, ph.filesz) < 0) goto bad;
@@ -97,6 +98,13 @@ int exec(char *path, char **argv) {
   p->trapframe->sp = sp;          // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
+  if(p->pid == 1){
+    vmprint(p->pagetable);
+  }
+
+  //将改变后的进程页表同步
+  sync_pagetable(p->pagetable, p->k_pagetable);
+
   return argc;  // this ends up in a0, the first argument to main(argc, argv)
 
 bad:
@@ -105,6 +113,8 @@ bad:
     iunlockput(ip);
     end_op();
   }
+  //将改变后的进程页表同步
+  sync_pagetable(p->pagetable, p->k_pagetable);
   return -1;
 }
 

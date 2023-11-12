@@ -316,21 +316,28 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
 int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
-  uint64 n, va0, pa0;
 
-  while (len > 0) {
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if (pa0 == 0) return -1;
-    n = PGSIZE - (srcva - va0);
-    if (n > len) n = len;
-    memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+  int ret;
+  w_sstatus(r_sstatus() | SSTATUS_SUM);
+  ret = copyin_new(pagetable, dst, srcva, len);
+  w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+  return ret;
 
-    len -= n;
-    dst += n;
-    srcva = va0 + PGSIZE;
-  }
-  return 0;
+  // uint64 n, va0, pa0;
+
+  // while (len > 0) {
+  //   va0 = PGROUNDDOWN(srcva);
+  //   pa0 = walkaddr(pagetable, va0);
+  //   if (pa0 == 0) return -1;
+  //   n = PGSIZE - (srcva - va0);
+  //   if (n > len) n = len;
+  //   memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+
+  //   len -= n;
+  //   dst += n;
+  //   srcva = va0 + PGSIZE;
+  // }
+  // return 0;
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -338,38 +345,45 @@ int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
 // until a '\0', or max.
 // Return 0 on success, -1 on error.
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
-  uint64 n, va0, pa0;
-  int got_null = 0;
 
-  while (got_null == 0 && max > 0) {
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if (pa0 == 0) return -1;
-    n = PGSIZE - (srcva - va0);
-    if (n > max) n = max;
+  int ret;
+  w_sstatus(r_sstatus() | SSTATUS_SUM);
+  ret = copyinstr_new(pagetable, dst, srcva, max);
+  w_sstatus(r_sstatus() & ~SSTATUS_SUM);
+  return ret;
 
-    char *p = (char *)(pa0 + (srcva - va0));
-    while (n > 0) {
-      if (*p == '\0') {
-        *dst = '\0';
-        got_null = 1;
-        break;
-      } else {
-        *dst = *p;
-      }
-      --n;
-      --max;
-      p++;
-      dst++;
-    }
+  // uint64 n, va0, pa0;
+  // int got_null = 0;
 
-    srcva = va0 + PGSIZE;
-  }
-  if (got_null) {
-    return 0;
-  } else {
-    return -1;
-  }
+  // while (got_null == 0 && max > 0) {
+  //   va0 = PGROUNDDOWN(srcva);
+  //   pa0 = walkaddr(pagetable, va0);
+  //   if (pa0 == 0) return -1;
+  //   n = PGSIZE - (srcva - va0);
+  //   if (n > max) n = max;
+
+  //   char *p = (char *)(pa0 + (srcva - va0));
+  //   while (n > 0) {
+  //     if (*p == '\0') {
+  //       *dst = '\0';
+  //       got_null = 1;
+  //       break;
+  //     } else {
+  //       *dst = *p;
+  //     }
+  //     --n;
+  //     --max;
+  //     p++;
+  //     dst++;
+  //   }
+
+  //   srcva = va0 + PGSIZE;
+  // }
+  // if (got_null) {
+  //   return 0;
+  // } else {
+  //   return -1;
+  // }
 }
 
 // check if use global kpgtbl or not
@@ -379,3 +393,115 @@ int test_pagetable() {
   printf("test_pagetable: %d\n", satp != gsatp);
   return satp != gsatp;
 }
+
+/****************************************task1*******************************************/
+
+void vmprint(pagetable_t pgtbl){
+  printf("page table %p\n", pgtbl);
+  uint64 idx = 0x0000000000000000;
+  vmrecursion(pgtbl, 1, idx);
+}
+
+// 递归函数
+void vmrecursion(pagetable_t pgtbl, int depth, uint64 idx){
+  
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pgtbl[i];
+
+    char rwxu[4] = "----";
+    
+    // 当前页表项有效
+    if(pte & PTE_V){
+      printf("||");
+
+      // 有效位转换打印
+      if(pte & PTE_R){
+        rwxu[0] = 'r';
+      }
+      if(pte & PTE_W){
+        rwxu[1] = 'w';
+      }
+      if(pte & PTE_X){
+        rwxu[2] = 'x';
+      }
+      if(pte & PTE_U){
+        rwxu[3] = 'u';
+      }
+
+      for(int j=1; j<depth; j++){
+        printf("   ||");
+      }
+
+      //判断当前页表项是否有效且不包含读（PTE_R）、写（PTE_W）和执行（PTE_X）权限
+      if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+        // 当前页表项是一个指向较低级页表的页表项
+        idx = idx + i;
+        idx = idx << 9;
+
+        printf("idx: %d: pa: %p, flags: %s\n", i, PTE2PA(pte), rwxu);
+        uint64 child = PTE2PA(pte);
+        vmrecursion((pagetable_t)child, depth+1, idx);
+        idx = idx >> 9;
+        idx = idx - i;
+      } else {
+        idx = idx + i;
+        idx = idx << 12;
+        printf("idx: %d: va: %p -> pa: %p, flags: %s\n", i, idx, PTE2PA(pte), rwxu);
+        idx = idx >> 12;
+        idx = idx - i;
+      }
+    }
+  }
+}
+
+/****************************************task2*******************************************/
+
+void kvmmap_new(pagetable_t k_pagetable, uint64 va, uint64 pa, uint64 sz, int perm) {
+  if (mappages(k_pagetable, va, sz, pa, perm) != 0) panic("kvmmap_new");
+}
+
+pagetable_t vmcreate(){
+  // 为内核页表分配内存PGSIZE
+  pagetable_t k_pagetable = (pagetable_t)kalloc();
+
+  // 设置页表的初始状态是空的
+  memset(k_pagetable, 0, PGSIZE);
+
+  // 将不同的物理地址映射到对应的虚拟地址
+  // 将UART0的物理地址映射到虚拟地址UART0上，并设置该映射为可读可写权限
+  kvmmap_new(k_pagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  kvmmap_new(k_pagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // // CLINT
+  // kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // 将PLIC的物理地址映射到虚拟地址 PLIC 上，并设置该映射为可读可写权限
+  kvmmap_new(k_pagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  kvmmap_new(k_pagetable, KERNBASE, KERNBASE, (uint64)etext - KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  kvmmap_new(k_pagetable, (uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  kvmmap_new(k_pagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+  return k_pagetable;
+}
+
+/****************************************task3*******************************************/
+
+ void sync_pagetable(pagetable_t user_pagetable, pagetable_t kernel_pagetable){
+
+  pagetable_t user_pa = (pagetable_t)PTE2PA(user_pagetable[0]);
+  pagetable_t kernel_pa = (pagetable_t)PTE2PA(kernel_pagetable[0]);
+
+  for(int i=0; i<0x60; i++){
+    // 将用户页表复制到内核页表中
+    kernel_pa[i] = user_pa[i];
+  }
+ }

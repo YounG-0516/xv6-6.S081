@@ -103,4 +103,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  pagetable_t k_pagetable;     //内核独立页表
+  uint64 kstack_pa;            //内核栈的物理地址
 };
