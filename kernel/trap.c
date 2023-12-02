@@ -77,9 +77,22 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
-    yield();
-
+  if(which_dev == 2){
+    // 如果当前进程的剩余时间片为0，说明该进程已经用完了它的时间片，需要进行调度。此时调用yield函数，将CPU的控制权交给其他进程。
+    if(p->ticks == 0)
+      yield();
+    // 当前进程的剩余时间片减1
+    p->remain_ticks--;
+    // 该进程已经用完了它的时间片，需要重新设置它的时间片
+    if(p->remain_ticks == 0 && p->save_trapframe == 0){
+      p->remain_ticks = p->ticks;
+      // 复制寄存器
+      p->save_trapframe = (struct trapframe *)kalloc();
+      memmove(p->save_trapframe, p->trapframe, PGSIZE);
+      p->trapframe->epc = p->alarm_handler; 
+    }
+  }
+    
   usertrapret();
 }
 

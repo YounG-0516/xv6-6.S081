@@ -103,4 +103,9 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  int ticks;                   // 两个定时器中断之间的时钟滴答数，即定时器间隔
+  uint64 alarm_handler;        // 定时器中断处理函数的地址
+  int remain_ticks;            // 上一次定时器中断后剩余的时钟滴答数
+  struct trapframe *save_trapframe;   // 保存的寄存器，用于中断后恢复原程序
 };
