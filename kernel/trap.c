@@ -67,7 +67,14 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if(r_scause() == 13 || r_scause() == 15){    // 出现缺页异常
+    // 获取错误页面地址
+    uint64 addr = r_stval();
+    // 判断是否是懒分配引起的（如果是，则错误的地址在 p->sz 内）
+    if(lazy_allocate(addr)<0){
+      p->killed = 1;
+    }
+  } else{
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
