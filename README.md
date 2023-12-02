@@ -71,7 +71,7 @@
 
 任务：在 `kernelprintf.c` 中添加一个 `backtrace()`，用于在出错时输出这之前栈中的函数调用。编译器会在每个栈帧中存入一个帧指针，指向调用者的帧指针。`backtrace()` 应该用这些帧指针来遍历栈并输出每个栈帧的保存的返回地址。
 
-<img src="C:/Users/Lenovo/AppData/Roaming/Typora/typora-user-images/image-20231201212830715.png" alt="image-20231201212830715" style="zoom:50%;" />
+<img src="./img-of-README/2.png" alt="image-20231201212830715" style="zoom:50%;" />
 
 1. 在 kernel/riscv.h 中添加读取帧指针 fp 的方法 r_fp
 
@@ -304,7 +304,7 @@ test0 的代码里存在一个问题：`p->trapframe->epc` 被覆盖后无法恢
 
 ##  结果截图
 
-<img src="./LAB4%EF%BC%9Atraps.assets/image-20231202203514350.png" alt="image-20231202203514350" style="zoom:70%;" />
+<img src="./img-of-README/1.png" alt="image-20231202203514350" style="zoom:70%;" />
 
 # 参考链接
 
