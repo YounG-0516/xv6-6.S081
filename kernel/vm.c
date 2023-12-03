@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -311,22 +313,33 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    
+    *pte = ((*pte) & (~PTE_W)) | PTE_COW;   // 将页面设置为不可写，并标志为写时复制页
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+
+    // 将父进程的物理页映射到子进程页表项中
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
+
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    // if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+    //   kfree(mem);
+    //   goto err;
+    // }
+
+    // 物理页引用次数加一
+    add_ref((void*)pa);
   }
   return 0;
 
@@ -357,6 +370,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   uint64 n, va0, pa0;
 
   while(len > 0){
+    if(checkcowpage(dstva)) // 检查每一个被写的页是否是COW页
+      allocatecow(dstva);
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
@@ -439,4 +454,42 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int 
+checkcowpage(uint64 va) {
+  pte_t *pte;
+  struct proc *p = myproc();
+  
+  return va < p->sz                             // 该虚拟地址在进程申请的内存范围内
+    && ((pte = walk(p->pagetable, va, 0))!=0)   // 该页表项存在
+    && (*pte & PTE_V)                           // 该页表项有效
+    && (*pte & PTE_COW);                        // 该页表项被标志为写时复制页
+}
+
+
+int 
+allocatecow(uint64 va) {
+  pte_t *pte;
+  struct proc *p = myproc();
+
+  // 通过页表获取虚拟地址对应的页表项
+  if((pte = walk(p->pagetable, va, 0)) == 0)
+    panic("allocatecow: walk");
+
+  uint64 pa = PTE2PA(*pte);
+  // 为一个写时复制页分配独立内存，并拷贝数据
+  uint64 mem = (uint64)cowcopy((void*)pa); 
+  if(mem == 0)
+    return -1;
+  
+  // 重新映射为可写，并清除 PTE_COW 标记
+  uint64 flags = (PTE_FLAGS(*pte) | PTE_W) & ~PTE_COW;
+  // 取消之前的映射
+  uvmunmap(p->pagetable, PGROUNDDOWN(va), 1, 0);
+  // 建立新的映射
+  if(mappages(p->pagetable, va, 1, mem, flags) == -1) {
+    panic("allocatecow: mappages");
+  }
+  return 0;
 }

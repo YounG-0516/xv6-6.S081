@@ -23,10 +23,23 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct spinlock cowlock; // 用于cowcount数组的锁
+
+// 物理地址p对应的物理页号
+#define PAGE_INDEX(p) (((p)-KERNBASE)/PGSIZE)
+
+// 从KERNBASE开始到PHYSTOP之间的每个物理页的引用计数（数组）
+int cowcount[PAGE_INDEX(PHYSTOP)]; 
+
+// 通过物理地址获得引用计数
+#define PA_COUNT(p) cowcount[PAGE_INDEX((uint64)(p))]
+
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&cowlock, "cow");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -51,15 +64,20 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+  acquire(&cowlock);
 
-  r = (struct run*)pa;
+  // cow_count减到零，释放内存
+  if(--PA_COUNT(pa)<=0){
+    memset(pa, 1, PGSIZE);
+    r = (struct run*)pa;
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  release(&cowlock);
+
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +94,49 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    PA_COUNT(r) = 1;;            // 将该物理页的引用次数初始化为1
+  }
   return (void*)r;
 }
+
+void
+add_ref(void *pa)
+{
+  if(((uint64)pa % PGSIZE) != 0 || (uint64)pa < KERNBASE || (uint64)pa >= PHYSTOP)
+    panic("add_ref");
+
+  acquire(&cowlock);
+  PA_COUNT(pa)++;
+  release(&cowlock);
+}
+
+
+void *
+cowcopy(void *pa) {
+  acquire(&cowlock);
+
+  // 当引用已经小于等于1时，不创建和复制到新的物理页，而是直接返回该页本身
+  if(PA_COUNT(pa) <= 1) { 
+    release(&cowlock);
+    return pa;
+  }
+
+  // 分配新的内存页，并复制旧页中的数据到新页
+  uint64 newpa = (uint64)kalloc();
+  if(newpa == 0) {
+    release(&cowlock);
+    return 0; 
+  }
+  memmove((void*)newpa, (void*)pa, PGSIZE);
+
+  // 旧页的引用减 1
+  PA_COUNT(pa)--;
+
+  release(&cowlock);
+  return (void*)newpa;
+}
+
+
+
