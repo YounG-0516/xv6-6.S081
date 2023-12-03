@@ -257,6 +257,18 @@
    }
    ```
 
+   并在kinit()函数中初始化自旋锁。
+   ```c
+   void
+   kinit()
+   {
+     initlock(&kmem.lock, "kmem");
+     initlock(&cowlock, "cow");
+     freerange(end, (void*)PHYSTOP);
+   }
+   ```
+   
+
 5. 当这里为止，我们已经可以通过很多测试，但实验手册提示我们修改 **copyout**函数。因为在呼叫**copyout**时，我们处于内核态，并不会触发**usertrap**，所以我们需要手动添加同样的监测代码，检测接收的页是否是共享COW页，若是，要额外进行复制操作。
 
    ```c
