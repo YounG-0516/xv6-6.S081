@@ -1,6 +1,6 @@
 # LAB5：lazy page allocation
 
-> To start the lab, switch to the trap branch
+> To start the lab, switch to the lazy branch
 >
 > ```
 >  $ git fetch
