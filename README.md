@@ -1,6 +1,6 @@
 # LAB6：Copy-on-Write Fork for xv6
 
-> To start the lab, switch to the trap branch
+> To start the lab, switch to the cow branch
 >
 > ```c
 > $ git fetch
