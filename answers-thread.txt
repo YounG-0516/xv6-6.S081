@@ -1,0 +1,17 @@
+1. thread_switch needs to save/restore only the callee-save registers. Why?
+   Because the Caller register is saved in thread_schedule's stack by the c compiler.
+
+2. This sets a breakpoint at line 60 of uthread.c. The breakpoint may (or may not) be triggered before you even run uthread. How could that happen?
+   Because if current_thread = next_thread, the thread that is about to run is the same as the current thread, the breakpoint is not executed.
+
+3、Why is the key missing when there are 2 threads instead of 1 thread?
+    insert函数如下：
+    static void insert(int key, int value, struct entry **p, struct entry *n)
+    {
+        struct entry *e = malloc(sizeof(struct entry));
+        e->key = key;
+        e->value = value;
+        e->next = n;    // 语句1
+        *p = e;         // 语句2
+    }
+    若两个线程在同一时间段内先执行语句1，之后这两个线程再一起执行语句2，那么先执行的那个线程的键会被覆盖掉，导致缺失key

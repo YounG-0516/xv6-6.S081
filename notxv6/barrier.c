@@ -11,7 +11,7 @@ struct barrier {
   pthread_mutex_t barrier_mutex;
   pthread_cond_t barrier_cond;
   int nthread;      // Number of threads that have reached this round of the barrier
-  int round;     // Barrier round
+  int round;        // Barrier round
 } bstate;
 
 static void
@@ -25,12 +25,20 @@ barrier_init(void)
 static void 
 barrier()
 {
-  // YOUR CODE HERE
-  //
-  // Block until all threads have called barrier() and
-  // then increment bstate.round.
-  //
-  
+  pthread_mutex_lock(&bstate.barrier_mutex);
+  bstate.nthread++;
+  if(bstate.nthread < nthread){
+    // 如果未达到总线程数，则睡眠，等待其他线程到来。
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+  } else {
+    // 如果达到总线程数，则唤醒所有等待的线程。
+    pthread_cond_broadcast(&bstate.barrier_cond);
+    // 屏障轮数加一
+    bstate.round++;
+    // 计数器清零，此时没有再等待的线程
+    bstate.nthread = 0;
+  }
+  pthread_mutex_unlock(&bstate.barrier_mutex);
 }
 
 static void *
