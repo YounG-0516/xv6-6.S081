@@ -304,15 +304,35 @@ sys_open(void)
       return -1;
     }
   } else {
-    if((ip = namei(path)) == 0){
-      end_op();
-      return -1;
-    }
-    ilock(ip);
-    if(ip->type == T_DIR && omode != O_RDONLY){
+    int depth;  
+    for(depth = 0; depth < 10; depth++) {
+      // 查找path对应的inode
+      if((ip = namei(path)) == 0){ 
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+      if(ip->type == T_DIR && omode != O_RDONLY){
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      // 如果是符号链接，则循环处理，直到找到真正的文件为止
+      if(ip->type == T_SYMLINK && (omode & O_NOFOLLOW) == 0) {
+        if(readi(ip, 0, (uint64)path, 0, MAXPATH) < 0) {
+          iunlockput(ip);
+          end_op();
+          return -1;
+        }
+      } else {
+        break;
+      }
       iunlockput(ip);
-      end_op();
-      return -1;
+    }
+    // 循环超过了一定的次数，可能发生了循环链接，返回-1
+    if(depth == 10) {  
+       end_op();
+       return -1;
     }
   }
 
@@ -482,5 +502,33 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+  // 获取参数
+  char target[MAXPATH], path[MAXPATH];
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  struct inode *ip;
+  begin_op();   // 开启文件系统操作
+
+  //创建一个inode，设置其类型为T_SYMLINK
+  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  // 将目标路径 target 写入到新创建的符号链接文件中
+  if(writei(ip, 0, (uint64)target, 0, MAXPATH) != MAXPATH){
+    end_op();
+    return -1;
+  }
+  
+  iunlockput(ip);
+  end_op();   // 结束文件系统操作
   return 0;
 }

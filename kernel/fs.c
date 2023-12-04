@@ -400,6 +400,37 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  bn -= NINDIRECT;
+
+  // 查找二级索引
+  if(bn < NINDIRECT * NINDIRECT){
+    // 如果二级索引块还未分配
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    // 读取二级索引块数据到缓冲区中
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    // 判断次级目录项是否存在
+    if((addr = a[bn / NINDIRECT]) == 0){
+      a[bn / NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    // 读取次级索引块数据到缓冲区中
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    // 判断bn对应的数据块是否存在
+    if((addr = a[bn % NINDIRECT]) == 0){
+      a[bn % NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+
+    // 释放缓冲区
+    brelse(bp);
+    return addr;
+  }
 
   panic("bmap: out of range");
 }
@@ -411,7 +442,9 @@ itrunc(struct inode *ip)
 {
   int i, j;
   struct buf *bp;
+  struct buf *bp2;
   uint *a;
+  uint *a2;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -432,6 +465,26 @@ itrunc(struct inode *ip)
     ip->addrs[NDIRECT] = 0;
   }
 
+  if(ip->addrs[NDIRECT+1]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j]){
+        bp2 = bread(ip->dev, a[j]);
+        a2 = (uint*)bp2->data;
+        for(int k = 0; k < NINDIRECT; k++){
+          if(a2[k])
+            bfree(ip->dev, a2[k]);
+        }
+        brelse(bp2);
+        bfree(ip->dev, a[j]);
+        a[j] = 0;
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
+  }
   ip->size = 0;
   iupdate(ip);
 }
