@@ -1,6 +1,6 @@
 # LAB1: Xv6 and Unix utilities
 
-本实验为哈工大（深圳）操作系统课内第一次实验，要求相比于mit-6.S081略有更改，详见[实验指导书]([实验概述 - 操作系统2023秋 | 哈工大（深圳） (gitee.io)](http://hitsz-cslab.gitee.io/os-labs/lab1/part1/))。
+本实验为哈工大（深圳）操作系统课内第一次实验，要求相比于mit-6.S081略有更改，详见[实验指导书](http://hitsz-cslab.gitee.io/os-labs/lab1/part1/)。
 
 > To start the lab, switch to the util branch
 >
