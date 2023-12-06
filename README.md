@@ -8,7 +8,7 @@ xv6 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且�
 
 每个实验在对应分支下，已完成：
 - [x] [util](https://github.com/YounG-0516/xv6-6.S081/tree/util)（HITSZ课内实验）
-- [x] syscall（HITSZ课内实验）
+- [x] [syscall](https://github.com/YounG-0516/xv6-6.S081/tree/syscall)（HITSZ课内实验）
 - [x] [pgtbl](https://github.com/YounG-0516/xv6-6.S081/tree/pgtbl)（HITSZ课内实验）
 - [x] [traps](https://github.com/YounG-0516/xv6-6.S081/tree/traps)
 - [x] [lazy](https://github.com/YounG-0516/xv6-6.S081/tree/lazy)
