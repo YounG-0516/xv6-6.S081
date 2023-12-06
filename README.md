@@ -7,14 +7,14 @@ xv6 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且�
 
 
 每个实验在对应分支下，已完成：
-- [x] util（HITSZ课内实验）
+- [x] [util](https://github.com/YounG-0516/xv6-6.S081/tree/util)（HITSZ课内实验）
 - [x] syscall（HITSZ课内实验）
-- [x] pgtbl（HITSZ课内实验）
+- [x] [pgtbl](https://github.com/YounG-0516/xv6-6.S081/tree/pgtbl)（HITSZ课内实验）
 - [x] [traps](https://github.com/YounG-0516/xv6-6.S081/tree/traps)
 - [x] [lazy](https://github.com/YounG-0516/xv6-6.S081/tree/lazy)
 - [x] [cow](https://github.com/YounG-0516/xv6-6.S081/tree/cow)
 - [x] [thread](https://github.com/YounG-0516/xv6-6.S081/tree/thread)
-- [x] lock（HITSZ课内实验）
-- [x] fs
-- [x] mmap
+- [x] [lock](https://github.com/YounG-0516/xv6-6.S081/tree/lock)（HITSZ课内实验）
+- [x] [fs](https://github.com/YounG-0516/xv6-6.S081/tree/fs)
+- [x] [mmap](https://github.com/YounG-0516/xv6-6.S081/tree/mmap)
 - [ ] network
