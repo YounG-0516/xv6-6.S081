@@ -82,6 +82,16 @@ struct trapframe {
 
 enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct VMA {	
+  uint64 start;         // 映射虚拟地址的起始地址
+  uint64 end;           // 映射虚拟地址的终止地址
+  int prot;			        // 权限(PTE_W/PTE_R)     
+  int flags;		        // 映射的类型(MAP_SHARED:1，MAP_PRIVATE:0)
+  int valid;		        // 该VMA是否正在被某进程使用中
+  struct file *file;	  // 指向的文件
+  struct VMA *next;
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -103,4 +113,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct VMA *vma;             // 进程对应的vma链表
+  uint64 min_addr;             // 已分配区域的最低地址
 };

@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "fcntl.h": "c",
+        "file.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "enabled"
+}

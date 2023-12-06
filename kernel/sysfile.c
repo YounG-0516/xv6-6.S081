@@ -484,3 +484,112 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  // 从寄存器中获取所有参数
+  uint64 addr;
+  int length, prot, flags, fd, offset;
+  if(argaddr(0, &addr) < 0 ||
+     argint(1, &length) < 0 ||
+     argint(2, &prot) < 0 ||
+     argint(3, &flags) < 0 ||
+     argint(4, &fd) < 0 ||
+     argint(5, &offset) < 0)
+    return -1;
+  if(addr != 0) panic("sys_mmap");
+  if(offset != 0) panic("sys_mmap");
+  
+  struct proc *p = myproc();
+  struct file *f = p->ofile[fd];
+
+  // 判断文件权限是否正确
+  // 如果文件不可读但请求了读取权限，则权限检查失败
+  // 如果文件不可写但请求了写入权限，且没有设置 MAP_PRIVATE 标志，则权限检查失败
+  if((prot & PROT_READ) && !f->readable)
+    return -1;
+  if((prot & PROT_WRITE) && (flags & MAP_SHARED) && !f->writable)
+    return -1;
+
+  // 分配一个 VMA（虚拟内存区域）结构体并设置属性
+  struct VMA* v = vma_alloc();
+  if(!v)  return -1;
+  // 填充相应字段
+  v->prot = ((prot & PROT_READ) ? PTE_R : 0) | ((prot & PROT_WRITE) ? PTE_W : 0);
+  v->flags = (flags & MAP_SHARED) ? 1 : 0;
+  v->file = f;
+  filedup(f);
+
+  // 将新申请的vma插入到进程的vma链表中去（头插法）
+  v->next = p->vma;
+  p->vma = v;
+
+  // 在要映射文件的进程的地址空间中找到一个未使用的区域
+  uint64 vmaddr = PGROUNDDOWN(p->min_addr - length);
+  if(vmaddr % PGSIZE != 0)  panic("sys_mmap");
+
+  // 映射地址
+  v->start = vmaddr;
+  v->end = p->min_addr;
+  p->min_addr = vmaddr;
+  printf("mmap: [%p, %p)\n", vmaddr, v->end);
+
+  return vmaddr;
+}
+
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  int length;
+
+  // 获取函数参数
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0){
+    return -1;
+  }
+
+  struct proc *p = myproc();
+  struct VMA *v = p->vma;
+  struct VMA *pre = 0;
+
+  // 查找映射地址对应的VMA
+  uint64 start = PGROUNDDOWN(addr);
+  uint64 end = PGROUNDUP(addr + length);
+  while(v != 0){
+    if(v->valid && start >= v->start && end <= v->end) 
+      break; 
+    pre = v;
+    v = v->next;
+  }
+  if(!v)  return -1;
+
+  // 如果VMA是shared且具有写权限，则把现在的内容写回文件
+  if(v->flags && (v->prot | PTE_W))
+    mmapfilewrite(v->file, start, end - start);
+  
+  // 解除页表的映射
+  for(uint64 i = start; i < end; i += PGSIZE){
+    if(walkaddr(p->pagetable, i)){
+      uvmunmap(p->pagetable, i, 1, 1);
+    }
+  }
+  
+  // 根据取消映射的起始地址和长度，更新VMA节点的start和end字段
+  if(v->start == start && end < v->end)
+    v->start = PGROUNDDOWN(addr + length);
+  else if(v->start < start && end == v->end)
+    v->end = PGROUNDUP(addr);
+  else if(v->start == start && end == v->end){
+    if(pre == 0){
+      p->vma = v->next;
+    } else {
+      pre->next = v->next;
+      v->next = 0;
+    }
+    fileclose(v->file);
+    vma_dealloc(v);
+  }
+
+  return 0;
+}

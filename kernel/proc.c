@@ -48,6 +48,7 @@ procinit(void)
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->kstack = KSTACK((int) (p - proc));
+      p->min_addr = MAXVA - 2 * PGSIZE;
   }
 }
 
@@ -302,6 +303,29 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  // 将进程p的VMA链表复制到子进程中，确保两个进程拥有相同的虚拟内存区域
+  np->vma = 0;
+  struct VMA *pv = p->vma;
+  struct VMA *pre = 0;
+  while(pv){
+    struct VMA *vma = vma_alloc();
+    vma->start = pv->start;
+    vma->end = pv->end;
+    vma->prot = pv->prot;
+    vma->flags = pv->flags;
+    vma->file = pv->file;
+    filedup(vma->file);
+    vma->next = 0;
+    if(pre == 0){
+      np->vma = vma;
+    }else{
+      pre->next = vma;
+      vma->next = 0;
+    }
+    pre = vma;
+    pv = pv->next;
+  }
+
   release(&np->lock);
 
   return pid;
@@ -343,6 +367,23 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  // munmap all mmap vma
+  struct VMA *vma = 0; 
+  struct VMA *nextvma = 0;
+  for(vma = p->vma; vma; vma = nextvma){
+    nextvma = vma->next;
+    // 扫描当前VMA节点中的所有物理页面，将其从进程p的页表中删除
+    for(uint64 i = vma->start; i < vma->end; i += PGSIZE)
+      if(walkaddr(p->pagetable, i)){
+        uvmunmap(p->pagetable, i, 1, 1);
+      }
+    vma->next = 0;
+    fileclose(vma->file);   // 关闭当前VMA节点关联的文件
+    vma_dealloc(vma);       // 释放当前VMA节点所占用的内存空间
+  }
+  // 链表头置空
+  p->vma = 0;
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
@@ -701,3 +742,86 @@ procdump(void)
     printf("\n");
   }
 }
+
+struct {  
+  struct spinlock lock;
+  struct VMA vmas[VMA_SIZE];
+} vmalist;
+
+void
+vmainit(void)
+{
+  initlock(&vmalist.lock, "vmalist");
+}
+
+struct VMA*
+vma_alloc(void)
+{
+  acquire(&vmalist.lock);
+  int i;
+  // 遍历查询未被使用的vma
+  for(i = 0; i < VMA_SIZE; i++){
+    if(vmalist.vmas[i].valid)
+      continue;
+    vmalist.vmas[i].valid = 1;
+    break;
+  }
+  release(&vmalist.lock);
+  if(i == VMA_SIZE)   panic("allocvma: no enough vma!");
+  return vmalist.vmas + i;
+}
+
+void
+vma_dealloc(struct VMA *vma)
+{
+  acquire(&vmalist.lock);
+  vma->valid = 0;
+  release(&vmalist.lock);
+}
+
+int
+mmap_handler(uint64 va, uint64 cause) 
+{
+  struct proc *p = myproc();
+
+  //循环遍历当前进程的VMA链表，找到包含指定虚拟地址va的VMA区域
+  struct VMA* v = p->vma;
+  while(v != 0){
+    if(v->valid && va >= v->start && va < v->end){
+      break;
+    }
+    v = v->next;
+  }
+  if(!v)  return -1; // not mmap addr
+
+  // 如果发生读取异常，但对应VMA区域的权限不包含可读权限，则返回-1；写入异常同理。
+  if(cause == 13 && !(v->prot & PTE_R)){
+    printf("cause == 13!\n");
+    return -1;
+  }
+  
+  if(cause == 15 && !(v->prot & PTE_W)){
+    printf("cause == 15!\n");
+    return -1;
+  } 
+  
+  // 分配物理内存页面
+  char *mem = kalloc();
+  if(mem == 0)  return -1;    // kalloc failed
+  memset(mem, 0, PGSIZE);
+  
+  // 将分配的物理页面映射到指定的虚拟地址，并设置相应的权限
+  uint64 va_down = PGROUNDDOWN(va);
+  if(mappages(p->pagetable, va_down, PGSIZE, (uint64)mem, v->prot|PTE_U|PTE_X) != 0){
+    kfree(mem);
+    return -1;
+  }
+  
+  // 将文件的内容读入已分配的内存
+  mmapfileread(v->file, 0, (uint64)mem, va_down - v->start, PGSIZE);
+  //printf("handler finish!\n");
+  
+  return 0;
+}
+
+

@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct VMA;
 
 // bio.c
 void            binit(void);
@@ -33,6 +34,8 @@ void            fileinit(void);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
+int             mmapfileread(struct file*, int, uint64, uint, uint);
+int             mmapfilewrite(struct file*, uint64, uint);
 
 // fs.c
 void            fsinit(int);
@@ -105,6 +108,10 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+void            vmainit(void);
+struct VMA*     vma_alloc(void);
+void            vma_dealloc(struct VMA *);
+int             mmap_handler(uint64, uint64);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
