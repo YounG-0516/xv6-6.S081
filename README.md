@@ -306,6 +306,3 @@ test0 的代码里存在一个问题：`p->trapframe->epc` 被覆盖后无法恢
 
 <img src="./img-of-README/1.png" alt="image-20231202203514350" style="zoom:70%;" />
 
-# 参考链接
-
-[xyfJASON/xv6-mit-6.S081-2020 at traps (github.com)](https://github.com/xyfJASON/xv6-mit-6.S081-2020/tree/traps)
